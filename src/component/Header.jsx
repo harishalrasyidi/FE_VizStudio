@@ -16,7 +16,8 @@ const Header = ({
   setCurrentCanvasId,
   totalCanvasCount,
   setTotalCanvasCount,
-  userAccessLevel
+  userAccessLevel,
+  onNavigate
   }) => {
   const [userName, setUserName] = useState('');
   const [usersList, setUsersList] = useState([]);
@@ -315,6 +316,18 @@ const goToPreviousCanvas = () => {
               <span id="menu-query" className="cursor-pointer d-flex align-items-center">
                 <TbSql className="me-1 mt-1" />
                 Query
+              </span>
+
+              <span className="mx-2">|</span>
+
+              <span 
+                id="menu-nl2sql" 
+                className="cursor-pointer d-flex align-items-center"
+                onClick={() => onNavigate && onNavigate('nl2sql')}
+                title="Natural Language to SQL"
+              >
+                <TbSql className="me-1 mt-1" />
+                NL2SQL
               </span>
 
               <span className="mx-2">|</span>

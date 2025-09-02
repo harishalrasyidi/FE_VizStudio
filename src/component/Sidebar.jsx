@@ -14,7 +14,7 @@ import { DEFAULT_CONFIG } from "./SidebarDiagram/ConfigConstants";
 import Header from "./Header";
 import SidebarCanvas from "./SidebarCanvas";
 
-const Sidebar = () => {
+const Sidebar = ({ onNavigate }) => {
   const [tables, setTables] = useState([]);
   const [groupedTables, setGroupedTables] = useState({});
   const [columns, setColumns] = useState({});
@@ -534,6 +534,7 @@ const Sidebar = () => {
         setCurrentCanvasId={setCurrentCanvasId}
         totalCanvasCount={totalCanvasCount}
         userAccessLevel={userAccessLevel}
+        onNavigate={onNavigate}
       />
       {userAccessLevel !== 'view' && (
         <>

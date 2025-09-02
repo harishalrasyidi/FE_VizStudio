@@ -16,6 +16,7 @@ import 'primereact/resources/themes/lara-light-indigo/theme.css';
 import 'primereact/resources/primereact.min.css';
 import VisualisasiChart from "./component/Visualiaze";
 import Canvas from "./component/Canvas";
+import NL2SQLPage from "./component/NL2SQLPage";
 import axios from "axios";
 
 function App() {
@@ -24,6 +25,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authView, setAuthView] = useState('login'); // 'login' atau 'register'
   const [userAccessLevel, setUserAccessLevel] = useState(null);
+  const [currentPage, setCurrentPage] = useState('dashboard'); // 'dashboard' atau 'nl2sql'
 
   useEffect(() => {
     // Cek apakah ada token tersimpan di localStorage
@@ -99,23 +101,29 @@ function App() {
 
   return (
     <>
-    
-      {/* <Header
-        currentCanvasIndex={currentCanvasIndex}
-        setCurrentCanvasIndex={setCurrentCanvasIndex} // Pass setter to Header
-      /> */}
-      <div className="main-container">
-        <Sidebar 
-          setCanvasData={setCanvasData} 
-          setCanvasQuery={setCanvasQuery} 
-        />
-        {/* <Canvas currentCanvasIndex={currentCanvasIndex}/> */}
-        {/* <Canvas 
-          data={canvasData} 
-          query={canvasQuery} 
-        /> */}
-      </div>
-      {/* <VisualisasiChart requestPayload={requestPayload} /> */}
+      {currentPage === 'nl2sql' ? (
+        <NL2SQLPage onNavigate={setCurrentPage} />
+      ) : (
+        <>
+          {/* <Header
+            currentCanvasIndex={currentCanvasIndex}
+            setCurrentCanvasIndex={setCurrentCanvasIndex} // Pass setter to Header
+          /> */}
+          <div className="main-container">
+            <Sidebar 
+              setCanvasData={setCanvasData} 
+              setCanvasQuery={setCanvasQuery}
+              onNavigate={setCurrentPage}
+            />
+            {/* <Canvas currentCanvasIndex={currentCanvasIndex}/> */}
+            {/* <Canvas 
+              data={canvasData} 
+              query={canvasQuery} 
+            /> */}
+          </div>
+          {/* <VisualisasiChart requestPayload={requestPayload} /> */}
+        </>
+      )}
     </>
   );
 }
