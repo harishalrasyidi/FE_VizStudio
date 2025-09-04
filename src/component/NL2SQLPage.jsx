@@ -2,10 +2,16 @@ import React, { useState, useEffect } from 'react';
 import './NL2SQLPage.css';
 import axios from 'axios';
 import config from '../config';
+import { Bar, Line, Pie } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Title, Tooltip, Legend } from 'chart.js';
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Title, Tooltip, Legend);
 
 const NL2SQLPage = ({ onNavigate }) => {
-  // State management
-  const [sessions, setSessions] = useState([]);
+  const [sessions] = useState([
+    { id_chat_session: '1', title: 'Session 1', created_at: new Date().toISOString() },
+    { id_chat_session: '2', title: 'Session 2', created_at: new Date().toISOString() },
+  ]);
   const [currentSession, setCurrentSession] = useState(null);
   const [chatHistory, setChatHistory] = useState([]);
   const [prompt, setPrompt] = useState('');
@@ -13,115 +19,72 @@ const NL2SQLPage = ({ onNavigate }) => {
   const [visualizationData, setVisualizationData] = useState(null);
   const [error, setError] = useState(null);
 
-  // Load user sessions on component mount
+  // Pantau perubahan visualizationData untuk debugging
   useEffect(() => {
-    loadUserSessions();
-  }, []);
-
-  // Load chat history when session changes
-  useEffect(() => {
-    if (currentSession) {
-      loadSessionHistory(currentSession.id_chat_session);
-    }
-  }, [currentSession]);
-
-  // API Functions
-  const loadUserSessions = async () => {
-    try {
-      const response = await axios.get(`${config.BASE_URL}/api/chat/sessions`);
-      if (response.data.status === 'success') {
-        setSessions(response.data.data);
-      }
-    } catch (error) {
-      console.error('Failed to load sessions:', error);
-      setError('Failed to load chat sessions');
-    }
-  };
-
-  const loadSessionHistory = async (sessionId) => {
-    try {
-      const response = await axios.get(`${config.BASE_URL}/api/chat/sessions/${sessionId}`);
-      if (response.data.status === 'success') {
-        setChatHistory(response.data.data.messages || []);
-      }
-    } catch (error) {
-      console.error('Failed to load session history:', error);
-      setError('Failed to load session history');
-    }
-  };
-
-  const createNewSession = async () => {
-    try {
-      const response = await axios.post(`${config.BASE_URL}/api/chat/sessions`, {
-        title: `New NL2SQL Session - ${new Date().toLocaleString()}`,
-        datasource_id: 1 // TODO: Make this dynamic based on user selection
-      });
-      
-      if (response.data.status === 'success') {
-        const newSession = response.data.data;
-        setSessions(prev => [newSession, ...prev]);
-        setCurrentSession(newSession);
-        setChatHistory([]);
-      }
-    } catch (error) {
-      console.error('Failed to create session:', error);
-      setError('Failed to create new session');
-    }
-  };
+    console.log('Updated Visualization Data:', JSON.stringify(visualizationData, null, 2));
+  }, [visualizationData]);
 
   const sendNL2SQLQuery = async () => {
     if (!prompt.trim()) return;
-    if (!currentSession) {
-      await createNewSession();
-      return;
-    }
 
     setIsLoading(true);
     setError(null);
 
     try {
-      const response = await axios.post(`${config.BASE_URL}/api/kelola-dashboard/nl2sql/generate`, {
-        prompt: prompt.trim(),
-        id_datasource: 1, // TODO: Make this dynamic
-        session_id: currentSession.id_chat_session,
-        execute: true,
-        save_visualization: false
-      });
+      const response = await axios.post(
+        `${config.API_BASE_URL}/api/kelola-dashboard/nl2sql/generate`,
+        {
+          prompt: prompt.trim(),
+          id_datasource: 12,
+          execute: true,
+          save_visualization: false,
+        },
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        }
+      );
+
+      console.log('NL2SQL Response:', JSON.stringify(response.data, null, 2));
 
       if (response.data.success) {
-        const { sql_query, executed_data, explanation, confidence_score } = response.data.data;
-        
-        // Add user message to chat history
+        // Perbaiki destrukturisasi: executed_data ada di response.data, bukan response.data.data
+        const { sql_query, explanation, confidence_score, analysis } = response.data.data;
+        const executed_data = response.data.executed_data;
+
+        console.log('Executed Data:', JSON.stringify(executed_data, null, 2));
+        console.log('Is Array:', Array.isArray(executed_data), 'Length:', executed_data?.length);
+
         const userMessage = {
           role: 'user',
           content: prompt.trim(),
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
 
-        // Add assistant response to chat history
         const assistantMessage = {
           role: 'assistant',
           content: {
             sql_query,
             explanation,
             confidence_score,
-            executed_data: executed_data || null
+            analysis,
+            executed_data: executed_data || null,
           },
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         };
 
-        setChatHistory(prev => [...prev, userMessage, assistantMessage]);
-        setVisualizationData(executed_data);
+        setChatHistory((prev) => [...prev, userMessage, assistantMessage]);
+
+        // Validasi dan deep copy executed_data
+        const dataToSet = Array.isArray(executed_data) && executed_data.length > 0 ? [...executed_data] : [];
+        console.log('Setting visualizationData:', JSON.stringify(dataToSet, null, 2));
+        setVisualizationData(dataToSet);
         setPrompt('');
-        
-        // Reload session history to get the latest from server
-        setTimeout(() => loadSessionHistory(currentSession.id_chat_session), 500);
       } else {
-        setError(response.data.message || 'Failed to generate SQL');
+        setError(response.data.message || 'Gagal menghasilkan SQL');
       }
     } catch (error) {
       console.error('NL2SQL Error:', error);
-      setError('Failed to process your request');
+      setError(error.response?.data?.message || 'Gagal memproses permintaan');
     } finally {
       setIsLoading(false);
     }
@@ -138,36 +101,150 @@ const NL2SQLPage = ({ onNavigate }) => {
     setCurrentSession(session);
     setVisualizationData(null);
     setError(null);
-  };
-
-  const deleteSession = async (sessionId, e) => {
-    e.stopPropagation();
-    if (!confirm('Are you sure you want to delete this session?')) return;
-
-    try {
-      await axios.delete(`${config.BASE_URL}/api/chat/sessions/${sessionId}`);
-      setSessions(prev => prev.filter(s => s.id_chat_session !== sessionId));
-      
-      if (currentSession?.id_chat_session === sessionId) {
-        setCurrentSession(null);
-        setChatHistory([]);
-        setVisualizationData(null);
-      }
-    } catch (error) {
-      console.error('Failed to delete session:', error);
-      setError('Failed to delete session');
-    }
+    setChatHistory([]);
   };
 
   const renderVisualization = () => {
+    console.log('Rendering Visualization Data:', JSON.stringify(visualizationData, null, 2));
+
     if (!visualizationData || !Array.isArray(visualizationData) || visualizationData.length === 0) {
       return (
         <div className="no-data-placeholder">
           <div className="no-data-content">
             <i className="fa fa-chart-bar fa-3x mb-3 text-muted"></i>
-            <h5 className="text-muted">No Data to Display</h5>
-            <p className="text-muted">Execute a query to see visualization results</p>
+            <h5 className="text-muted">Tidak Ada Data untuk Ditampilkan</h5>
+            <p className="text-muted">Jalankan query untuk melihat hasil visualisasi</p>
           </div>
+        </div>
+      );
+    }
+
+    const columns = Object.keys(visualizationData[0] || {});
+    if (columns.length === 0) {
+      console.warn('No columns found in visualization data');
+      return (
+        <div className="no-data-placeholder">
+          <div className="no-data-content">
+            <h5 className="text-muted">Data Tidak Valid</h5>
+            <p className="text-muted">Data yang diterima tidak memiliki kolom</p>
+          </div>
+        </div>
+      );
+    }
+
+    const isSingleColumn = columns.length === 1;
+    const isAggregation = columns.length >= 2 && typeof visualizationData[0][columns[1]] === 'number';
+    const isTimeSeries = columns.some((col) => col.toLowerCase().includes('date') || col.toLowerCase().includes('month') || col.toLowerCase().includes('year'));
+
+    if (isSingleColumn) {
+      const valueCounts = visualizationData.reduce((acc, row) => {
+        const value = String(row[columns[0]]);
+        acc[value] = (acc[value] || 0) + 1;
+        return acc;
+      }, {});
+
+      const labels = Object.keys(valueCounts);
+      const values = Object.values(valueCounts);
+
+      const chartData = {
+        labels,
+        datasets: [
+          {
+            label: 'Jumlah',
+            data: values,
+            backgroundColor: ['#4CAF50', '#FF9800', '#2196F3', '#F44336', '#9C27B0', '#3F51B5', '#FFEB3B', '#E91E63', '#009688', '#FFC107'],
+            borderColor: '#333',
+            borderWidth: 1,
+          },
+        ],
+      };
+
+      const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top' },
+          title: { display: true, text: `Distribusi ${columns[0]}` },
+        },
+      };
+
+      return (
+        <div className="visualization-container">
+          <Pie data={chartData} options={chartOptions} height={300} />
+        </div>
+      );
+    }
+
+    if (isTimeSeries) {
+      const labels = visualizationData.map((row) => String(row[columns[0]]));
+      const values = visualizationData.map((row) => Number(row[columns[1]]) || 0);
+
+      const chartData = {
+        labels,
+        datasets: [
+          {
+            label: columns[1],
+            data: values,
+            backgroundColor: 'rgba(33, 150, 243, 0.2)',
+            borderColor: '#2196F3',
+            fill: true,
+          },
+        ],
+      };
+
+      const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top' },
+          title: { display: true, text: 'Tren Data' },
+        },
+        scales: {
+          x: { title: { display: true, text: columns[0] } },
+          y: { title: { display: true, text: columns[1] } },
+        },
+      };
+
+      return (
+        <div className="visualization-container">
+          <Line data={chartData} options={chartOptions} height={300} />
+        </div>
+      );
+    }
+
+    if (isAggregation) {
+      const labels = visualizationData.map((row) => String(row[columns[0]]));
+      const values = visualizationData.map((row) => Number(row[columns[1]]) || 0);
+
+      const chartData = {
+        labels,
+        datasets: [
+          {
+            label: columns[1],
+            data: values,
+            backgroundColor: ['#4CAF50', '#FF9800', '#2196F3', '#F44336', '#9C27B0', '#3F51B5', '#FFEB3B'],
+            borderColor: '#333',
+            borderWidth: 1,
+          },
+        ],
+      };
+
+      const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'top' },
+          title: { display: true, text: 'Jumlah Peserta per Provinsi' },
+        },
+        scales: {
+          x: { title: { display: true, text: columns[0] } },
+          y: { title: { display: true, text: columns[1] } },
+        },
+      };
+
+      return (
+        <div className="visualization-container">
+          <Bar data={chartData} options={chartOptions} height={300} />
         </div>
       );
     }
@@ -178,7 +255,7 @@ const NL2SQLPage = ({ onNavigate }) => {
           <table className="table table-striped table-hover">
             <thead className="table-dark">
               <tr>
-                {Object.keys(visualizationData[0]).map(key => (
+                {columns.map((key) => (
                   <th key={key}>{key}</th>
                 ))}
               </tr>
@@ -187,7 +264,7 @@ const NL2SQLPage = ({ onNavigate }) => {
               {visualizationData.map((row, index) => (
                 <tr key={index}>
                   {Object.values(row).map((value, i) => (
-                    <td key={i}>{value}</td>
+                    <td key={i}>{String(value)}</td>
                   ))}
                 </tr>
               ))}
@@ -204,9 +281,7 @@ const NL2SQLPage = ({ onNavigate }) => {
         <div key={index} className="chat-message user-message">
           <div className="message-content">
             <div className="message-text">{message.content}</div>
-            <div className="message-time">
-              {new Date(message.timestamp).toLocaleTimeString()}
-            </div>
+            <div className="message-time">{new Date(message.timestamp).toLocaleTimeString()}</div>
           </div>
         </div>
       );
@@ -220,16 +295,20 @@ const NL2SQLPage = ({ onNavigate }) => {
             </div>
             {message.content.explanation && (
               <div className="explanation">
-                <strong>Explanation:</strong>
+                <strong>Penjelasan:</strong>
                 <p>{message.content.explanation}</p>
+              </div>
+            )}
+            {message.content.analysis && (
+              <div className="analysis">
+                <strong>Analisis:</strong>
+                <p>{message.content.analysis}</p>
               </div>
             )}
             <div className="confidence-score">
               <small>Confidence: {(message.content.confidence_score * 100).toFixed(1)}%</small>
             </div>
-            <div className="message-time">
-              {new Date(message.timestamp).toLocaleTimeString()}
-            </div>
+            <div className="message-time">{new Date(message.timestamp).toLocaleTimeString()}</div>
           </div>
         </div>
       );
@@ -238,14 +317,13 @@ const NL2SQLPage = ({ onNavigate }) => {
 
   return (
     <div className="nl2sql-page">
-      {/* Navigation Header */}
       <div className="nl2sql-header">
         <div className="header-content">
           <div className="header-left">
-            <button 
+            <button
               className="btn btn-outline-secondary btn-sm"
               onClick={() => onNavigate('dashboard')}
-              title="Back to Dashboard"
+              title="Kembali ke Dashboard"
             >
               <i className="fa fa-arrow-left me-2"></i>
               Dashboard
@@ -253,7 +331,7 @@ const NL2SQLPage = ({ onNavigate }) => {
             <h4 className="page-title">Natural Language to SQL</h4>
           </div>
           <div className="header-right">
-            <button 
+            <button
               className="btn btn-outline-danger btn-sm"
               onClick={() => {
                 localStorage.clear();
@@ -269,24 +347,21 @@ const NL2SQLPage = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="nl2sql-content">
-        {/* Left Sidebar - Sessions */}
         <div className="sessions-sidebar">
           <div className="sidebar-header">
-            <h5>Chat Sessions</h5>
-            <button 
+            <h5>Sesi Chat</h5>
+            <button
               className="btn btn-primary btn-sm"
-              onClick={createNewSession}
-              title="Create New Session"
+              title="Buat Sesi Baru"
+              disabled
             >
               <i className="fa fa-plus"></i>
             </button>
           </div>
-          
           <div className="sessions-list">
-            {sessions.map(session => (
-              <div 
+            {sessions.map((session) => (
+              <div
                 key={session.id_chat_session}
                 className={`session-item ${currentSession?.id_chat_session === session.id_chat_session ? 'active' : ''}`}
                 onClick={() => selectSession(session)}
@@ -294,84 +369,70 @@ const NL2SQLPage = ({ onNavigate }) => {
                 <div className="session-title">{session.title}</div>
                 <div className="session-meta">
                   <small>{new Date(session.created_at).toLocaleDateString()}</small>
-                  <button 
+                  <button
                     className="btn btn-outline-danger btn-sm"
-                    onClick={(e) => deleteSession(session.id_chat_session, e)}
-                    title="Delete Session"
+                    title="Hapus Sesi"
+                    disabled
                   >
                     <i className="fa fa-trash"></i>
                   </button>
                 </div>
               </div>
             ))}
-            
             {sessions.length === 0 && (
               <div className="no-sessions">
-                <p className="text-muted">No chat sessions yet</p>
-                <button className="btn btn-outline-primary" onClick={createNewSession}>
-                  Create First Session
+                <p className="text-muted">Belum ada sesi chat</p>
+                <button
+                  className="btn btn-outline-primary"
+                  disabled
+                >
+                  Buat Sesi Pertama
                 </button>
               </div>
             )}
           </div>
         </div>
 
-        {/* Center Area - Visualization */}
         <div className="visualization-area">
           <div className="area-header">
-            <h5>Query Results</h5>
-            {currentSession && (
-              <span className="current-session-name">{currentSession.title}</span>
-            )}
+            <h5>Hasil Query</h5>
+            {currentSession && <span className="current-session-name">{currentSession.title}</span>}
           </div>
-          
           {error && (
             <div className="alert alert-danger" role="alert">
               {error}
             </div>
           )}
-          
-          <div className="visualization-content">
-            {renderVisualization()}
-          </div>
+          <div className="visualization-content">{renderVisualization()}</div>
         </div>
 
-        {/* Right Sidebar - Chat & Input */}
         <div className="chat-sidebar">
           <div className="sidebar-header">
-            <h5>Conversation</h5>
-            {currentSession && (
-              <small className="text-muted">
-                Session: {currentSession.id_chat_session}
-              </small>
-            )}
+            <h5>Percakapan</h5>
+            {currentSession && <small className="text-muted">Sesi: {currentSession.id_chat_session}</small>}
           </div>
-          
-          {/* Chat History */}
           <div className="chat-history">
             {chatHistory.length === 0 ? (
               <div className="no-chat-placeholder">
                 <i className="fa fa-comments fa-2x mb-2 text-muted"></i>
-                <p className="text-muted">Start a conversation by asking a question</p>
+                <p className="text-muted">Mulai percakapan dengan mengajukan pertanyaan</p>
               </div>
             ) : (
               chatHistory.map((message, index) => renderChatMessage(message, index))
             )}
           </div>
-
-          {/* Input Area */}
           <div className="input-area">
             <div className="input-group">
               <textarea
                 className="form-control"
-                placeholder="Ask a question about your data..."
+                placeholder="Ajukan pertanyaan tentang data Anda..."
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 onKeyPress={handleKeyPress}
                 rows="3"
                 disabled={isLoading}
               />
-              <button 
+              <button
                 className="btn btn-primary"
                 onClick={sendNL2SQLQuery}
                 disabled={isLoading || !prompt.trim()}
@@ -379,20 +440,19 @@ const NL2SQLPage = ({ onNavigate }) => {
                 {isLoading ? (
                   <span>
                     <span className="spinner-border spinner-border-sm me-1" role="status"></span>
-                    Processing...
+                    Memproses...
                   </span>
                 ) : (
                   <span>
                     <i className="fa fa-paper-plane me-1"></i>
-                    Send
+                    Kirim
                   </span>
                 )}
               </button>
             </div>
-            
             {!currentSession && (
               <small className="text-muted">
-                No active session. A new session will be created when you send your first message.
+                Tidak ada sesi aktif. Mulai dengan mengirim pertanyaan.
               </small>
             )}
           </div>
