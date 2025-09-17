@@ -321,12 +321,20 @@ const NL2SQLPage = ({ onNavigate }) => {
         <div className="header-content">
           <div className="header-left">
             <button
-              className="btn btn-outline-secondary btn-sm"
+              className="btn btn-outline-secondary btn-sm me-2"
               onClick={() => onNavigate('dashboard')}
               title="Kembali ke Dashboard"
             >
               <i className="fa fa-arrow-left me-2"></i>
               Dashboard
+            </button>
+            <button
+              className="btn btn-outline-info btn-sm"
+              onClick={() => onNavigate('knowledge')}
+              title="Kelola Basis Pengetahuan"
+            >
+              <i className="fa fa-book me-2"></i>
+              Knowledge Base
             </button>
             <h4 className="page-title">Natural Language to SQL</h4>
           </div>
