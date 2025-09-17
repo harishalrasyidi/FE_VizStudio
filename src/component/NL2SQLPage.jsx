@@ -18,8 +18,10 @@ const NL2SQLPage = ({ onNavigate }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [visualizationData, setVisualizationData] = useState(null);
   const [error, setError] = useState(null);
+  const [chartType, setChartType] = useState('table');
+  const [showChartSelector, setShowChartSelector] = useState(false);
+  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
-  // Pantau perubahan visualizationData untuk debugging
   useEffect(() => {
     console.log('Updated Visualization Data:', JSON.stringify(visualizationData, null, 2));
   }, [visualizationData]);
@@ -47,12 +49,16 @@ const NL2SQLPage = ({ onNavigate }) => {
       console.log('NL2SQL Response:', JSON.stringify(response.data, null, 2));
 
       if (response.data.success) {
-        // Perbaiki destrukturisasi: executed_data ada di response.data, bukan response.data.data
-        const { sql_query, explanation, confidence_score, analysis } = response.data.data;
+        const { sql_query, explanation, confidence_score, analysis, chart_recommendation } = response.data.data;
         const executed_data = response.data.executed_data;
 
         console.log('Executed Data:', JSON.stringify(executed_data, null, 2));
-        console.log('Is Array:', Array.isArray(executed_data), 'Length:', executed_data?.length);
+        console.log('Chart Recommendation:', chart_recommendation);
+
+        if (chart_recommendation) {
+          setChartType(chart_recommendation.recommended_type || 'table');
+          setShowChartSelector(true);
+        }
 
         const userMessage = {
           role: 'user',
@@ -74,11 +80,11 @@ const NL2SQLPage = ({ onNavigate }) => {
 
         setChatHistory((prev) => [...prev, userMessage, assistantMessage]);
 
-        // Validasi dan deep copy executed_data
         const dataToSet = Array.isArray(executed_data) && executed_data.length > 0 ? [...executed_data] : [];
         console.log('Setting visualizationData:', JSON.stringify(dataToSet, null, 2));
         setVisualizationData(dataToSet);
         setPrompt('');
+        setSortConfig({ key: null, direction: 'asc' });
       } else {
         setError(response.data.message || 'Gagal menghasilkan SQL');
       }
@@ -102,10 +108,35 @@ const NL2SQLPage = ({ onNavigate }) => {
     setVisualizationData(null);
     setError(null);
     setChatHistory([]);
+    setChartType('table');
+    setShowChartSelector(false);
+    setSortConfig({ key: null, direction: 'asc' });
+  };
+
+  const sortData = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+
+    const sortedData = [...visualizationData].sort((a, b) => {
+      const aValue = a[key] ?? '';
+      const bValue = b[key] ?? '';
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
+        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+      }
+      return direction === 'asc'
+        ? String(aValue).localeCompare(String(bValue))
+        : String(bValue).localeCompare(String(aValue));
+    });
+
+    setVisualizationData(sortedData);
+    setSortConfig({ key, direction });
   };
 
   const renderVisualization = () => {
     console.log('Rendering Visualization Data:', JSON.stringify(visualizationData, null, 2));
+    console.log('Current Chart Type:', chartType);
 
     if (!visualizationData || !Array.isArray(visualizationData) || visualizationData.length === 0) {
       return (
@@ -132,25 +163,87 @@ const NL2SQLPage = ({ onNavigate }) => {
       );
     }
 
+    let chartComponent = null;
+    let chartData = null;
+    let chartOptions = null;
+
+    if (chartType === 'table') {
+      return (
+        <div className="visualization-container">
+          <div className="table-responsive">
+            <table className="table table-striped table-hover">
+              <thead className="table-dark">
+                <tr>
+                  {columns.map((key) => (
+                    <th
+                      key={key}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => sortData(key)}
+                    >
+                      {key}
+                      {sortConfig.key === key && (
+                        <span className="ms-1">
+                          {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                        </span>
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visualizationData.map((row, index) => (
+                  <tr key={index}>
+                    {Object.values(row).map((value, i) => (
+                      <td key={i}>{String(value)}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+
     const isSingleColumn = columns.length === 1;
     const isAggregation = columns.length >= 2 && typeof visualizationData[0][columns[1]] === 'number';
     const isTimeSeries = columns.some((col) => col.toLowerCase().includes('date') || col.toLowerCase().includes('month') || col.toLowerCase().includes('year'));
 
-    if (isSingleColumn) {
-      const valueCounts = visualizationData.reduce((acc, row) => {
-        const value = String(row[columns[0]]);
-        acc[value] = (acc[value] || 0) + 1;
-        return acc;
-      }, {});
+    if (chartType === 'pie') {
+      let labels, values;
+      if (isAggregation) {
+        labels = visualizationData.map((row) => String(row[columns[0]] || ''));
+        values = visualizationData.map((row) => Number(row[columns[1]]) || 0);
+      } else {
+        const valueCounts = visualizationData.reduce((acc, row) => {
+          const value = String(row[columns[0]] || '').trim();
+          if (value) {
+            acc[value] = (acc[value] || 0) + 1;
+          }
+          return acc;
+        }, {});
+        console.log('Pie Chart Value Counts:', JSON.stringify(valueCounts, null, 2));
+        labels = Object.keys(valueCounts);
+        values = Object.values(valueCounts);
+      }
 
-      const labels = Object.keys(valueCounts);
-      const values = Object.values(valueCounts);
+      if (labels.length === 0 || values.length === 0) {
+        console.warn('No valid data for Pie Chart');
+        return (
+          <div className="no-data-placeholder">
+            <div className="no-data-content">
+              <h5 className="text-muted">Data Tidak Valid untuk Pie Chart</h5>
+              <p className="text-muted">Data tidak cukup untuk menampilkan Pie Chart</p>
+            </div>
+          </div>
+        );
+      }
 
-      const chartData = {
+      chartData = {
         labels,
         datasets: [
           {
-            label: 'Jumlah',
+            label: isAggregation ? columns[1] : 'Jumlah',
             data: values,
             backgroundColor: ['#4CAF50', '#FF9800', '#2196F3', '#F44336', '#9C27B0', '#3F51B5', '#FFEB3B', '#E91E63', '#009688', '#FFC107'],
             borderColor: '#333',
@@ -159,31 +252,25 @@ const NL2SQLPage = ({ onNavigate }) => {
         ],
       };
 
-      const chartOptions = {
+      chartOptions = {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
           legend: { position: 'top' },
-          title: { display: true, text: `Distribusi ${columns[0]}` },
+          title: { display: true, text: `Distribusi ${isAggregation ? columns[1] : columns[0]}` },
         },
       };
 
-      return (
-        <div className="visualization-container">
-          <Pie data={chartData} options={chartOptions} height={300} />
-        </div>
-      );
-    }
-
-    if (isTimeSeries) {
+      chartComponent = <Pie data={chartData} options={chartOptions} height={300} />;
+    } else if (chartType === 'line') {
       const labels = visualizationData.map((row) => String(row[columns[0]]));
       const values = visualizationData.map((row) => Number(row[columns[1]]) || 0);
 
-      const chartData = {
+      chartData = {
         labels,
         datasets: [
           {
-            label: columns[1],
+            label: columns[1] || 'Nilai',
             data: values,
             backgroundColor: 'rgba(33, 150, 243, 0.2)',
             borderColor: '#2196F3',
@@ -192,7 +279,7 @@ const NL2SQLPage = ({ onNavigate }) => {
         ],
       };
 
-      const chartOptions = {
+      chartOptions = {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
@@ -201,26 +288,20 @@ const NL2SQLPage = ({ onNavigate }) => {
         },
         scales: {
           x: { title: { display: true, text: columns[0] } },
-          y: { title: { display: true, text: columns[1] } },
+          y: { title: { display: true, text: columns[1] || 'Nilai' } },
         },
       };
 
-      return (
-        <div className="visualization-container">
-          <Line data={chartData} options={chartOptions} height={300} />
-        </div>
-      );
-    }
-
-    if (isAggregation) {
+      chartComponent = <Line data={chartData} options={chartOptions} height={300} />;
+    } else if (chartType === 'bar') {
       const labels = visualizationData.map((row) => String(row[columns[0]]));
       const values = visualizationData.map((row) => Number(row[columns[1]]) || 0);
 
-      const chartData = {
+      chartData = {
         labels,
         datasets: [
           {
-            label: columns[1],
+            label: columns[1] || 'Jumlah',
             data: values,
             backgroundColor: ['#4CAF50', '#FF9800', '#2196F3', '#F44336', '#9C27B0', '#3F51B5', '#FFEB3B'],
             borderColor: '#333',
@@ -229,7 +310,7 @@ const NL2SQLPage = ({ onNavigate }) => {
         ],
       };
 
-      const chartOptions = {
+      chartOptions = {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
@@ -238,39 +319,16 @@ const NL2SQLPage = ({ onNavigate }) => {
         },
         scales: {
           x: { title: { display: true, text: columns[0] } },
-          y: { title: { display: true, text: columns[1] } },
+          y: { title: { display: true, text: columns[1] || 'Jumlah' } },
         },
       };
 
-      return (
-        <div className="visualization-container">
-          <Bar data={chartData} options={chartOptions} height={300} />
-        </div>
-      );
+      chartComponent = <Bar data={chartData} options={chartOptions} height={300} />;
     }
 
     return (
       <div className="visualization-container">
-        <div className="table-responsive">
-          <table className="table table-striped table-hover">
-            <thead className="table-dark">
-              <tr>
-                {columns.map((key) => (
-                  <th key={key}>{key}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {visualizationData.map((row, index) => (
-                <tr key={index}>
-                  {Object.values(row).map((value, i) => (
-                    <td key={i}>{String(value)}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {chartComponent}
       </div>
     );
   };
@@ -305,9 +363,6 @@ const NL2SQLPage = ({ onNavigate }) => {
                 <p>{message.content.analysis}</p>
               </div>
             )}
-            <div className="confidence-score">
-              <small>Confidence: {(message.content.confidence_score * 100).toFixed(1)}%</small>
-            </div>
             <div className="message-time">{new Date(message.timestamp).toLocaleTimeString()}</div>
           </div>
         </div>
@@ -396,6 +451,21 @@ const NL2SQLPage = ({ onNavigate }) => {
         <div className="visualization-area">
           <div className="area-header">
             <h5>Hasil Query</h5>
+            {showChartSelector && visualizationData && (
+              <div className="d-flex align-items-center gap-2">
+                <select
+                  className="form-select form-select-sm"
+                  value={chartType}
+                  onChange={(e) => setChartType(e.target.value)}
+                  style={{ width: 'auto' }}
+                >
+                  <option value="table">Tabel</option>
+                  <option value="bar">Bar Chart</option>
+                  <option value="line">Line Chart</option>
+                  <option value="pie">Pie Chart</option>
+                </select>
+              </div>
+            )}
             {currentSession && <span className="current-session-name">{currentSession.title}</span>}
           </div>
           {error && (
