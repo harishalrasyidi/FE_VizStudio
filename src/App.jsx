@@ -17,6 +17,7 @@ import 'primereact/resources/primereact.min.css';
 import VisualisasiChart from "./component/Visualiaze";
 import Canvas from "./component/Canvas";
 import NL2SQLPage from "./component/NL2SQLPage";
+import KnowledgeManagement from "./component/KnowledgeManagement";
 import axios from "axios";
 
 function App() {
@@ -103,6 +104,8 @@ function App() {
     <>
       {currentPage === 'nl2sql' ? (
         <NL2SQLPage onNavigate={setCurrentPage} />
+      ) : currentPage === 'knowledge' ? (
+        <KnowledgeManagement onNavigate={setCurrentPage} />
       ) : (
         <>
           {/* <Header
