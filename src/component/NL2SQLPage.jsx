@@ -8,26 +8,215 @@ import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Title, Tooltip, Legend);
 
 const NL2SQLPage = ({ onNavigate }) => {
-  const [sessions] = useState([
-    { id_chat_session: '1', title: 'Session 1', created_at: new Date().toISOString() },
-    { id_chat_session: '2', title: 'Session 2', created_at: new Date().toISOString() },
-  ]);
+  const [sessions, setSessions] = useState([]);
   const [currentSession, setCurrentSession] = useState(null);
   const [chatHistory, setChatHistory] = useState([]);
   const [prompt, setPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [visualizationData, setVisualizationData] = useState(null);
   const [error, setError] = useState(null);
   const [chartType, setChartType] = useState('table');
   const [showChartSelector, setShowChartSelector] = useState(false);
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [editingSession, setEditingSession] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [isUpdatingSession, setIsUpdatingSession] = useState(false);
+
+  // Load sessions on component mount
+  useEffect(() => {
+    loadSessions();
+  }, []);
 
   useEffect(() => {
     console.log('Updated Visualization Data:', JSON.stringify(visualizationData, null, 2));
   }, [visualizationData]);
 
+  // Load user's chat sessions
+  const loadSessions = async () => {
+    setIsLoadingSessions(true);
+    try {
+      const response = await axios.get(
+        `${config.API_BASE_URL}/api/chat-sessions`,
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        setSessions(response.data.data);
+      } else {
+        setError('Gagal memuat sesi chat');
+      }
+    } catch (error) {
+      console.error('Load sessions error:', error);
+      setError('Gagal memuat sesi chat');
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  };
+
+  // Create new chat session
+  const createNewSession = async () => {
+    setIsCreatingSession(true);
+    try {
+      const response = await axios.post(
+        `${config.API_BASE_URL}/api/chat-sessions`,
+        {
+          title: `Sesi Chat ${new Date().toLocaleString('id-ID')}`,
+          datasource_id: 12 // Default datasource ID
+        },
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        const newSession = response.data.data;
+        setSessions(prev => [newSession, ...prev]);
+        setCurrentSession(newSession);
+        setChatHistory([]);
+        setVisualizationData(null);
+        setError(null);
+      } else {
+        setError('Gagal membuat sesi baru');
+      }
+    } catch (error) {
+      console.error('Create session error:', error);
+      setError('Gagal membuat sesi baru');
+    } finally {
+      setIsCreatingSession(false);
+    }
+  };
+
+  // Load chat history for selected session
+  const loadSessionHistory = async (sessionId) => {
+    try {
+      const response = await axios.get(
+        `${config.API_BASE_URL}/api/chat-sessions/${sessionId}`,
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        const messages = response.data.data.messages.map(msg => ({
+          role: msg.type === 'human' ? 'user' : 'assistant',
+          content: msg.type === 'human' ? msg.content : {
+            sql_query: msg.content.includes('```sql') ? msg.content.split('```sql')[1]?.split('```')[0]?.trim() : '',
+            explanation: msg.content,
+          },
+          timestamp: msg.timestamp
+        }));
+        setChatHistory(messages);
+      }
+    } catch (error) {
+      console.error('Load session history error:', error);
+    }
+  };
+
+  // Delete chat session
+  const deleteSession = async (sessionId, event) => {
+    event.stopPropagation();
+    if (!confirm('Apakah Anda yakin ingin menghapus sesi ini?')) return;
+    
+    try {
+      const response = await axios.delete(
+        `${config.API_BASE_URL}/api/chat-sessions/${sessionId}`,
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        setSessions(prev => prev.filter(s => s.session_id !== sessionId));
+        if (currentSession?.session_id === sessionId) {
+          setCurrentSession(null);
+          setChatHistory([]);
+          setVisualizationData(null);
+        }
+      } else {
+        setError('Gagal menghapus sesi');
+      }
+    } catch (error) {
+      console.error('Delete session error:', error);
+      setError('Gagal menghapus sesi');
+    }
+  };
+
+  // Start editing session title
+  const startEditSession = (session, event) => {
+    event.stopPropagation();
+    setEditingSession(session.session_id);
+    setEditTitle(session.title);
+  };
+
+  // Cancel editing session title
+  const cancelEditSession = () => {
+    setEditingSession(null);
+    setEditTitle('');
+  };
+
+  // Save edited session title
+  const saveEditSession = async (sessionId, event) => {
+    if (event) event.stopPropagation();
+    if (!editTitle.trim()) return;
+    
+    setIsUpdatingSession(true);
+    try {
+      const response = await axios.put(
+        `${config.API_BASE_URL}/api/chat-sessions/${sessionId}`,
+        { title: editTitle.trim() },
+        {
+          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+        }
+      );
+      
+      if (response.data.status === 'success') {
+        // Update sessions list
+        setSessions(sessions.map(s => 
+          s.session_id === sessionId 
+            ? { ...s, title: editTitle.trim() }
+            : s
+        ));
+        
+        // Update current session if it's the one being edited
+        if (currentSession?.session_id === sessionId) {
+          setCurrentSession({ ...currentSession, title: editTitle.trim() });
+        }
+        
+        setEditingSession(null);
+        setEditTitle('');
+      } else {
+        setError('Gagal mengupdate judul sesi');
+      }
+    } catch (error) {
+      console.error('Update session error:', error);
+      setError('Gagal mengupdate judul sesi');
+    } finally {
+      setIsUpdatingSession(false);
+    }
+  };
+
+  // Handle key press in edit input
+  const handleEditKeyPress = (e, sessionId) => {
+    if (e.key === 'Enter') {
+      saveEditSession(sessionId);
+    } else if (e.key === 'Escape') {
+      cancelEditSession();
+    }
+  };
+
   const sendNL2SQLQuery = async () => {
     if (!prompt.trim()) return;
+
+    // Create session if none exists
+    let sessionToUse = currentSession;
+    if (!sessionToUse) {
+      await createNewSession();
+      sessionToUse = currentSession; // This should be updated after createNewSession
+    }
 
     setIsLoading(true);
     setError(null);
@@ -38,6 +227,7 @@ const NL2SQLPage = ({ onNavigate }) => {
         {
           prompt: prompt.trim(),
           id_datasource: 12,
+          session_id: sessionToUse?.session_id, // Include session_id for chat history
           execute: true,
           save_visualization: false,
         },
@@ -103,14 +293,16 @@ const NL2SQLPage = ({ onNavigate }) => {
     }
   };
 
-  const selectSession = (session) => {
+  const selectSession = async (session) => {
     setCurrentSession(session);
     setVisualizationData(null);
     setError(null);
-    setChatHistory([]);
     setChartType('table');
     setShowChartSelector(false);
     setSortConfig({ key: null, direction: 'asc' });
+    
+    // Load chat history for this session
+    await loadSessionHistory(session.session_id);
   };
 
   const sortData = (key) => {
@@ -416,40 +608,109 @@ const NL2SQLPage = ({ onNavigate }) => {
             <h5>Sesi Chat</h5>
             <button
               className="btn btn-primary btn-sm"
+              onClick={createNewSession}
+              disabled={isCreatingSession}
               title="Buat Sesi Baru"
-              disabled
             >
-              <i className="fa fa-plus"></i>
+              {isCreatingSession ? (
+                <span className="spinner-border spinner-border-sm" role="status"></span>
+              ) : (
+                <i className="fa fa-plus"></i>
+              )}
             </button>
           </div>
           <div className="sessions-list">
-            {sessions.map((session) => (
-              <div
-                key={session.id_chat_session}
-                className={`session-item ${currentSession?.id_chat_session === session.id_chat_session ? 'active' : ''}`}
-                onClick={() => selectSession(session)}
-              >
-                <div className="session-title">{session.title}</div>
-                <div className="session-meta">
-                  <small>{new Date(session.created_at).toLocaleDateString()}</small>
-                  <button
-                    className="btn btn-outline-danger btn-sm"
-                    title="Hapus Sesi"
-                    disabled
-                  >
-                    <i className="fa fa-trash"></i>
-                  </button>
-                </div>
+            {isLoadingSessions ? (
+              <div className="text-center p-3">
+                <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                Memuat sesi...
               </div>
-            ))}
-            {sessions.length === 0 && (
+            ) : (
+              sessions.map((session) => (
+                <div
+                  key={session.session_id}
+                  className={`session-item ${currentSession?.session_id === session.session_id ? 'active' : ''}`}
+                  onClick={() => editingSession !== session.session_id ? selectSession(session) : null}
+                >
+                  {editingSession === session.session_id ? (
+                    <div className="session-edit-mode">
+                      <input
+                        type="text"
+                        className="form-control form-control-sm mb-2"
+                        value={editTitle}
+                        onChange={(e) => setEditTitle(e.target.value)}
+                        onKeyPress={(e) => handleEditKeyPress(e, session.session_id)}
+                        onBlur={() => saveEditSession(session.session_id)}
+                        placeholder="Masukkan judul sesi"
+                        autoFocus
+                        disabled={isUpdatingSession}
+                      />
+                      <div className="session-edit-actions">
+                        <button
+                          className="btn btn-success btn-sm me-1"
+                          onClick={(e) => saveEditSession(session.session_id, e)}
+                          disabled={isUpdatingSession || !editTitle.trim()}
+                          title="Simpan"
+                        >
+                          {isUpdatingSession ? (
+                            <span className="spinner-border spinner-border-sm" role="status"></span>
+                          ) : (
+                            <i className="fa fa-check"></i>
+                          )}
+                        </button>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={cancelEditSession}
+                          disabled={isUpdatingSession}
+                          title="Batal"
+                        >
+                          <i className="fa fa-times"></i>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="session-title">{session.title}</div>
+                      <div className="session-meta">
+                        <small>{new Date(session.created_at).toLocaleDateString('id-ID')}</small>
+                        <div className="session-actions">
+                          <button
+                            className="btn btn-outline-primary btn-sm me-1"
+                            onClick={(e) => startEditSession(session, e)}
+                            title="Edit Judul"
+                          >
+                            <i className="fa fa-edit"></i>
+                          </button>
+                          <button
+                            className="btn btn-outline-danger btn-sm"
+                            onClick={(e) => deleteSession(session.session_id, e)}
+                            title="Hapus Sesi"
+                          >
+                            <i className="fa fa-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+            {sessions.length === 0 && !isLoadingSessions && (
               <div className="no-sessions">
                 <p className="text-muted">Belum ada sesi chat</p>
                 <button
                   className="btn btn-outline-primary"
-                  disabled
+                  onClick={createNewSession}
+                  disabled={isCreatingSession}
                 >
-                  Buat Sesi Pertama
+                  {isCreatingSession ? (
+                    <span>
+                      <span className="spinner-border spinner-border-sm me-2" role="status"></span>
+                      Membuat...
+                    </span>
+                  ) : (
+                    'Buat Sesi Pertama'
+                  )}
                 </button>
               </div>
             )}
@@ -487,7 +748,11 @@ const NL2SQLPage = ({ onNavigate }) => {
         <div className="chat-sidebar">
           <div className="sidebar-header">
             <h5>Percakapan</h5>
-            {currentSession && <small className="text-muted">Sesi: {currentSession.id_chat_session}</small>}
+            {currentSession && (
+              <small className="text-muted">
+                Sesi: {currentSession.session_id.substring(0, 8)}...
+              </small>
+            )}
           </div>
           <div className="chat-history">
             {chatHistory.length === 0 ? (
@@ -530,7 +795,7 @@ const NL2SQLPage = ({ onNavigate }) => {
             </div>
             {!currentSession && (
               <small className="text-muted">
-                Tidak ada sesi aktif. Mulai dengan mengirim pertanyaan.
+                Tidak ada sesi aktif. Sesi baru akan dibuat otomatis saat mengirim pertanyaan.
               </small>
             )}
           </div>

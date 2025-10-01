@@ -420,6 +420,66 @@
   height: 0.875rem;
 }
 
+/* Session loading state */
+.sessions-list .text-center {
+  padding: 2rem 1rem;
+}
+
+/* Session item interactions */
+.session-item {
+  position: relative;
+}
+
+.session-item .btn-outline-danger,
+.session-item .btn-outline-primary {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.session-item:hover .btn-outline-danger,
+.session-item:hover .btn-outline-primary {
+  opacity: 1;
+}
+
+.session-item .btn-outline-danger:hover {
+  transform: scale(1.1);
+}
+
+/* Session edit mode */
+.session-edit-mode {
+  width: 100%;
+}
+
+.session-edit-actions {
+  display: flex;
+  gap: 0.25rem;
+  justify-content: flex-end;
+}
+
+.session-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+/* Session creation states */
+.sidebar-header .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Session UUID display */
+.sidebar-header small {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.7rem;
+}
+
+/* Better visual feedback for active session */
+.session-item.active {
+  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+  border-color: #2196f3;
+  box-shadow: 0 2px 4px rgba(33, 150, 243, 0.2);
+}
+
 /* Scrollbar Styling */
 .sessions-list::-webkit-scrollbar,
 .chat-history::-webkit-scrollbar,
