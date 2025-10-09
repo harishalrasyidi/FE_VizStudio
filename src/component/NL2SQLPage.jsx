@@ -27,74 +27,76 @@ const NL2SQLPage = ({ onNavigate }) => {
   }, [visualizationData]);
 
   const sendNL2SQLQuery = async () => {
-    if (!prompt.trim()) return;
+  if (!prompt.trim()) return;
 
-    setIsLoading(true);
-    setError(null);
+  setIsLoading(true);
+  setError(null);
 
-    try {
-      const response = await axios.post(
-        `${config.API_BASE_URL}/api/kelola-dashboard/nl2sql/generate`,
-        {
-          prompt: prompt.trim(),
-          id_datasource: 12,
-          execute: true,
-          save_visualization: false,
-        },
-        {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        }
-      );
-
-      console.log('NL2SQL Response:', JSON.stringify(response.data, null, 2));
-
-      if (response.data.success) {
-        const { sql_query, explanation, confidence_score, analysis, chart_recommendation } = response.data.data;
-        const executed_data = response.data.executed_data;
-
-        console.log('Executed Data:', JSON.stringify(executed_data, null, 2));
-        console.log('Chart Recommendation:', chart_recommendation);
-
-        if (chart_recommendation) {
-          setChartType(chart_recommendation.recommended_type || 'table');
-          setShowChartSelector(true);
-        }
-
-        const userMessage = {
-          role: 'user',
-          content: prompt.trim(),
-          timestamp: new Date().toISOString(),
-        };
-
-        const assistantMessage = {
-          role: 'assistant',
-          content: {
-            sql_query,
-            explanation,
-            confidence_score,
-            analysis,
-            executed_data: executed_data || null,
-          },
-          timestamp: new Date().toISOString(),
-        };
-
-        setChatHistory((prev) => [...prev, userMessage, assistantMessage]);
-
-        const dataToSet = Array.isArray(executed_data) && executed_data.length > 0 ? [...executed_data] : [];
-        console.log('Setting visualizationData:', JSON.stringify(dataToSet, null, 2));
-        setVisualizationData(dataToSet);
-        setPrompt('');
-        setSortConfig({ key: null, direction: 'asc' });
-      } else {
-        setError(response.data.message || 'Gagal menghasilkan SQL');
+  try {
+    const response = await axios.post(
+      `${config.API_BASE_URL}/api/kelola-dashboard/nl2sql/generate`,
+      {
+        prompt: prompt.trim(),
+        id_datasource: 12,
+        execute: true,
+        save_visualization: false,
+      },
+      {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
       }
-    } catch (error) {
-      console.error('NL2SQL Error:', error);
-      setError(error.response?.data?.message || 'Gagal memproses permintaan');
-    } finally {
-      setIsLoading(false);
+    );
+
+    console.log('NL2SQL Response:', JSON.stringify(response.data, null, 2));
+
+    if (response.data.success) {
+      const { sql_query, explanation, confidence_score, analysis, chart_recommendation, used_knowledge } =
+        response.data.data;
+      const executed_data = response.data.executed_data;
+
+      console.log('Executed Data:', JSON.stringify(executed_data, null, 2));
+      console.log('Chart Recommendation:', chart_recommendation);
+
+      if (chart_recommendation) {
+        setChartType(chart_recommendation.recommended_type || 'table');
+        setShowChartSelector(true);
+      }
+
+      const userMessage = {
+        role: 'user',
+        content: prompt.trim(),
+        timestamp: new Date().toISOString(),
+      };
+
+      const assistantMessage = {
+        role: 'assistant',
+        content: {
+          sql_query,
+          explanation,
+          confidence_score,
+          analysis,
+          used_knowledge: used_knowledge || [], // Tambahkan konteks bisnis
+          executed_data: executed_data || null,
+        },
+        timestamp: new Date().toISOString(),
+      };
+
+      setChatHistory((prev) => [...prev, userMessage, assistantMessage]);
+
+      const dataToSet = Array.isArray(executed_data) && executed_data.length > 0 ? [...executed_data] : [];
+      console.log('Setting visualizationData:', JSON.stringify(dataToSet, null, 2));
+      setVisualizationData(dataToSet);
+      setPrompt('');
+      setSortConfig({ key: null, direction: 'asc' });
+    } else {
+      setError(response.data.message || 'Gagal menghasilkan SQL');
     }
-  };
+  } catch (error) {
+    console.error('NL2SQL Error:', error);
+    setError(error.response?.data?.message || 'Gagal memproses permintaan');
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -334,41 +336,53 @@ const NL2SQLPage = ({ onNavigate }) => {
   };
 
   const renderChatMessage = (message, index) => {
-    if (message.role === 'user') {
-      return (
-        <div key={index} className="chat-message user-message">
-          <div className="message-content">
-            <div className="message-text">{message.content}</div>
-            <div className="message-time">{new Date(message.timestamp).toLocaleTimeString()}</div>
-          </div>
+  if (message.role === 'user') {
+    return (
+      <div key={index} className="chat-message user-message">
+        <div className="message-content">
+          <div className="message-text">{message.content}</div>
+          <div className="message-time">{new Date(message.timestamp).toLocaleTimeString()}</div>
         </div>
-      );
-    } else if (message.role === 'assistant') {
-      return (
-        <div key={index} className="chat-message assistant-message">
-          <div className="message-content">
-            <div className="sql-query">
-              <strong>Generated SQL:</strong>
-              <pre className="sql-code">{message.content.sql_query}</pre>
+      </div>
+    );
+  } else if (message.role === 'assistant') {
+    return (
+      <div key={index} className="chat-message assistant-message">
+        <div className="message-content">
+          <div className="sql-query">
+            <strong>Generated SQL:</strong>
+            <pre className="sql-code">{message.content.sql_query}</pre>
+          </div>
+          {message.content.explanation && (
+            <div className="explanation">
+              <strong>Penjelasan:</strong>
+              <p>{message.content.explanation}</p>
             </div>
-            {message.content.explanation && (
-              <div className="explanation">
-                <strong>Penjelasan:</strong>
-                <p>{message.content.explanation}</p>
-              </div>
-            )}
-            {message.content.analysis && (
-              <div className="analysis">
-                <strong>Analisis:</strong>
-                <p>{message.content.analysis}</p>
-              </div>
-            )}
-            <div className="message-time">{new Date(message.timestamp).toLocaleTimeString()}</div>
-          </div>
+          )}
+          {message.content.used_knowledge && message.content.used_knowledge.length > 0 && (
+            <div className="knowledge-context">
+              <strong>Konteks Bisnis Digunakan:</strong>
+              <ul>
+                {message.content.used_knowledge.map((k, i) => (
+                  <li key={i}>
+                    <strong>{k.term}:</strong> {k.content}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {message.content.analysis && (
+            <div className="analysis">
+              <strong>Analisis:</strong>
+              <p>{message.content.analysis}</p>
+            </div>
+          )}
+          <div className="message-time">{new Date(message.timestamp).toLocaleTimeString()}</div>
         </div>
-      );
-    }
-  };
+      </div>
+    );
+  }
+};
 
   return (
     <div className="nl2sql-page">
