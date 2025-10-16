@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, MoreVertical, X, ArrowLeft, Database, Edit, Trash2 } from 'lucide-react';
+import { Search, Plus, MoreVertical, X, ArrowLeft, Database, Edit, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import axios from 'axios';
 import config from '../config';
 import './KnowledgeManagement.css';
@@ -20,9 +20,11 @@ const KnowledgeManagement = ({ onNavigate }) => {
   const [editId, setEditId] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [perPage] = useState(10); // Jumlah data per halaman
+  const [perPage] = useState(10);
   const [totalPages, setTotalPages] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
 
   const knowledgeTypes = [
     'Terminologi Bisnis',
@@ -32,7 +34,6 @@ const KnowledgeManagement = ({ onNavigate }) => {
     'Definisi Data',
   ];
 
-  // Fetch data dengan pagination
   const fetchKnowledgeData = async (page = 1) => {
     setIsLoading(true);
     setError(null);
@@ -64,7 +65,6 @@ const KnowledgeManagement = ({ onNavigate }) => {
     fetchKnowledgeData(currentPage);
   }, [currentPage]);
 
-  // Filter data untuk pencarian di frontend
   const filteredData = knowledgeData.filter(
     (item) =>
       item.term.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -142,21 +142,33 @@ const KnowledgeManagement = ({ onNavigate }) => {
     setShowSidebar(true);
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Apakah Anda yakin ingin menghapus data ini?')) return;
-
+  const handleDelete = async () => {
     try {
       await axios.delete(
-        `${config.API_BASE_URL}/api/kelola-dashboard/knowledge-base/${id}`,
+        `${config.API_BASE_URL}/api/kelola-dashboard/knowledge-base/${deleteId}`,
         {
           headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
         }
       );
       await fetchKnowledgeData(currentPage);
+      setShowDeleteModal(false);
+      setDeleteId(null);
     } catch (err) {
       console.error('Error deleting knowledge:', err);
       setError(err.response?.data?.error || 'Gagal menghapus data pengetahuan');
+      setShowDeleteModal(false);
+      setDeleteId(null);
     }
+  };
+
+  const handleOpenDeleteModal = (id) => {
+    setDeleteId(id);
+    setShowDeleteModal(true);
+  };
+
+  const handleCloseDeleteModal = () => {
+    setShowDeleteModal(false);
+    setDeleteId(null);
   };
 
   const handleAddNew = () => {
@@ -184,14 +196,12 @@ const KnowledgeManagement = ({ onNavigate }) => {
     setError(null);
   };
 
-  // Fungsi untuk mengganti halaman
   const handlePageChange = (page) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page);
     }
   };
 
-  // Render tombol pagination
   const renderPagination = () => {
     const pages = [];
     const maxPagesToShow = 5;
@@ -217,19 +227,23 @@ const KnowledgeManagement = ({ onNavigate }) => {
     return (
       <div className="pagination-container">
         <button
-          className="pagination-button"
+          className="pagination-button pagination-nav"
           onClick={() => handlePageChange(currentPage - 1)}
           disabled={currentPage === 1}
+          title="Halaman Sebelumnya"
         >
-          Previous
+          <ChevronLeft size={16} />
+          <span className="pagination-text">Previous</span>
         </button>
         {pages}
         <button
-          className="pagination-button"
+          className="pagination-button pagination-nav"
           onClick={() => handlePageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
+          title="Halaman Berikutnya"
         >
-          Next
+          <span className="pagination-text">Next</span>
+          <ChevronRight size={16} />
         </button>
         <div className="pagination-info">
           Halaman {currentPage} dari {totalPages} (Total: {totalItems} data)
@@ -419,7 +433,7 @@ const KnowledgeManagement = ({ onNavigate }) => {
                             </button>
                             <button
                               className="action-button text-danger"
-                              onClick={() => handleDelete(item.id)}
+                              onClick={() => handleOpenDeleteModal(item.id)}
                               title="Hapus"
                             >
                               <Trash2 size={16} />
@@ -441,6 +455,37 @@ const KnowledgeManagement = ({ onNavigate }) => {
             )}
           </div>
         </div>
+
+        {/* Modal Konfirmasi Hapus */}
+        {showDeleteModal && (
+          <div className="modal-overlay">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h3>Konfirmasi Hapus</h3>
+                <button className="modal-close-button" onClick={handleCloseDeleteModal}>
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="modal-body">
+                <p>Apakah Anda yakin ingin menghapus data ini? Tindakan ini tidak dapat dibatalkan.</p>
+              </div>
+              <div className="modal-footer">
+                <button
+                  className="modal-button cancel"
+                  onClick={handleCloseDeleteModal}
+                >
+                  Batal
+                </button>
+                <button
+                  className="modal-button delete"
+                  onClick={handleDelete}
+                >
+                  Hapus
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
