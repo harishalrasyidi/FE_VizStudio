@@ -9,7 +9,6 @@ const KnowledgeManagement = ({ onNavigate }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [formData, setFormData] = useState({
     id_datasource: 12,
-    id_user: 1,
     entry_type: '',
     term: '',
     content: '',
@@ -115,7 +114,6 @@ const KnowledgeManagement = ({ onNavigate }) => {
       await fetchKnowledgeData(currentPage);
       setFormData({
         id_datasource: 12,
-        id_user: 1,
         entry_type: '',
         term: '',
         content: '',
@@ -133,7 +131,6 @@ const KnowledgeManagement = ({ onNavigate }) => {
   const handleEdit = (item) => {
     setFormData({
       id_datasource: item.id_datasource,
-      id_user: item.id_user,
       entry_type: item.entry_type,
       term: item.term,
       content: item.content,
@@ -175,7 +172,6 @@ const KnowledgeManagement = ({ onNavigate }) => {
     setEditId(null);
     setFormData({
       id_datasource: 12,
-      id_user: 1,
       entry_type: '',
       term: '',
       content: '',
@@ -187,7 +183,6 @@ const KnowledgeManagement = ({ onNavigate }) => {
     setShowSidebar(false);
     setFormData({
       id_datasource: 12,
-      id_user: 1,
       entry_type: '',
       term: '',
       content: '',
