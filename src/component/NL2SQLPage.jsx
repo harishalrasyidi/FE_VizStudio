@@ -23,6 +23,10 @@ const NL2SQLPage = ({ onNavigate }) => {
   const [editingSession, setEditingSession] = useState(null);
   const [editTitle, setEditTitle] = useState('');
   const [isUpdatingSession, setIsUpdatingSession] = useState(false);
+  
+  // Sidebar states
+  const [isChatSidebarMinimized, setIsChatSidebarMinimized] = useState(false);
+  const [isSessionSidebarMinimized, setIsSessionSidebarMinimized] = useState(false);
 
   // Load sessions on component mount
   useEffect(() => {
@@ -208,6 +212,15 @@ const NL2SQLPage = ({ onNavigate }) => {
     }
   };
 
+  // Sidebar toggle functions
+  const toggleChatSidebar = () => {
+    setIsChatSidebarMinimized(!isChatSidebarMinimized);
+  };
+
+  const toggleSessionSidebar = () => {
+    setIsSessionSidebarMinimized(!isSessionSidebarMinimized);
+  };
+
   const sendNL2SQLQuery = async () => {
     if (!prompt.trim()) return;
 
@@ -362,36 +375,39 @@ const NL2SQLPage = ({ onNavigate }) => {
     if (chartType === 'table') {
       return (
         <div className="visualization-container">
-          <div className="table-responsive">
-            <table className="table table-striped table-hover">
-              <thead className="table-dark">
-                <tr>
-                  {columns.map((key) => (
-                    <th
-                      key={key}
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => sortData(key)}
-                    >
-                      {key}
-                      {sortConfig.key === key && (
-                        <span className="ms-1">
-                          {sortConfig.direction === 'asc' ? '↑' : '↓'}
-                        </span>
-                      )}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {visualizationData.map((row, index) => (
-                  <tr key={index}>
-                    {Object.values(row).map((value, i) => (
-                      <td key={i}>{String(value)}</td>
+          <div className="table-wrapper">
+            <div className="table-responsive">
+              <table className="table table-striped table-hover">
+                <thead className="table-dark">
+                  <tr>
+                    {columns.map((key) => (
+                      <th
+                        key={key}
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => sortData(key)}
+                        title={`Klik untuk mengurutkan berdasarkan ${key}`}
+                      >
+                        {key}
+                        {sortConfig.key === key && (
+                          <span className="ms-1">
+                            {sortConfig.direction === 'asc' ? '↑' : '↓'}
+                          </span>
+                        )}
+                      </th>
                     ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {visualizationData.map((row, index) => (
+                    <tr key={index}>
+                      {Object.values(row).map((value, i) => (
+                        <td key={i} title={String(value)}>{String(value)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       );
@@ -453,7 +469,7 @@ const NL2SQLPage = ({ onNavigate }) => {
         },
       };
 
-      chartComponent = <Pie data={chartData} options={chartOptions} height={300} />;
+      chartComponent = <Pie data={chartData} options={chartOptions} />;
     } else if (chartType === 'line') {
       const labels = visualizationData.map((row) => String(row[columns[0]]));
       const values = visualizationData.map((row) => Number(row[columns[1]]) || 0);
@@ -484,7 +500,7 @@ const NL2SQLPage = ({ onNavigate }) => {
         },
       };
 
-      chartComponent = <Line data={chartData} options={chartOptions} height={300} />;
+      chartComponent = <Line data={chartData} options={chartOptions} />;
     } else if (chartType === 'bar') {
       const labels = visualizationData.map((row) => String(row[columns[0]]));
       const values = visualizationData.map((row) => Number(row[columns[1]]) || 0);
@@ -515,12 +531,14 @@ const NL2SQLPage = ({ onNavigate }) => {
         },
       };
 
-      chartComponent = <Bar data={chartData} options={chartOptions} height={300} />;
+      chartComponent = <Bar data={chartData} options={chartOptions} />;
     }
 
     return (
       <div className="visualization-container">
-        {chartComponent}
+        <div className="chart-container">
+          {chartComponent}
+        </div>
       </div>
     );
   };
@@ -603,23 +621,28 @@ const NL2SQLPage = ({ onNavigate }) => {
       </div>
 
       <div className="nl2sql-content">
-        <div className="sessions-sidebar">
-          <div className="sidebar-header">
-            <h5>Sesi Chat</h5>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={createNewSession}
-              disabled={isCreatingSession}
-              title="Buat Sesi Baru"
-            >
-              {isCreatingSession ? (
-                <span className="spinner-border spinner-border-sm" role="status"></span>
-              ) : (
-                <i className="fa fa-plus"></i>
-              )}
-            </button>
-          </div>
-          <div className="sessions-list">
+        <div className={`sessions-sidebar ${isSessionSidebarMinimized ? 'minimized' : ''}`}>
+          <button className="sidebar-toggle" onClick={toggleSessionSidebar} title="Toggle Session Sidebar">
+            <i className={`fa fa-chevron-${isSessionSidebarMinimized ? 'right' : 'left'}`}></i>
+          </button>
+          
+          <div className="sidebar-content">
+            <div className="sidebar-header">
+              <h5>Sesi Chat</h5>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={createNewSession}
+                disabled={isCreatingSession}
+                title="Buat Sesi Baru"
+              >
+                {isCreatingSession ? (
+                  <span className="spinner-border spinner-border-sm" role="status"></span>
+                ) : (
+                  <i className="fa fa-plus"></i>
+                )}
+              </button>
+            </div>
+            <div className="sessions-list">
             {isLoadingSessions ? (
               <div className="text-center p-3">
                 <span className="spinner-border spinner-border-sm me-2" role="status"></span>
@@ -710,14 +733,13 @@ const NL2SQLPage = ({ onNavigate }) => {
                     </span>
                   ) : (
                     'Buat Sesi Pertama'
-                  )}
-                </button>
-              </div>
+                )}
+              </button>
+            </div>
             )}
           </div>
-        </div>
-
-        <div className="visualization-area">
+          </div>
+        </div>        <div className="visualization-area">
           <div className="area-header">
             <h5>Hasil Query</h5>
             {showChartSelector && visualizationData && (
@@ -745,16 +767,21 @@ const NL2SQLPage = ({ onNavigate }) => {
           <div className="visualization-content">{renderVisualization()}</div>
         </div>
 
-        <div className="chat-sidebar">
-          <div className="sidebar-header">
-            <h5>Percakapan</h5>
-            {currentSession && (
-              <small className="text-muted">
-                Sesi: {currentSession.session_id.substring(0, 8)}...
-              </small>
-            )}
-          </div>
-          <div className="chat-history">
+        <div className={`chat-sidebar ${isChatSidebarMinimized ? 'minimized' : ''}`}>
+          <button className="sidebar-toggle" onClick={toggleChatSidebar} title="Toggle Chat Sidebar">
+            <i className={`fa fa-chevron-${isChatSidebarMinimized ? 'left' : 'right'}`}></i>
+          </button>
+          
+          <div className="sidebar-content">
+            <div className="sidebar-header">
+              <h5>Percakapan</h5>
+              {currentSession && (
+                <small className="text-muted">
+                  Sesi: {currentSession.session_id.substring(0, 8)}...
+                </small>
+              )}
+            </div>
+            <div className="chat-history">
             {chatHistory.length === 0 ? (
               <div className="no-chat-placeholder">
                 <i className="fa fa-comments fa-2x mb-2 text-muted"></i>
@@ -798,6 +825,7 @@ const NL2SQLPage = ({ onNavigate }) => {
                 Tidak ada sesi aktif. Sesi baru akan dibuat otomatis saat mengirim pertanyaan.
               </small>
             )}
+          </div>
           </div>
         </div>
       </div>
