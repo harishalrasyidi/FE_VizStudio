@@ -244,6 +244,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  max-height: calc(100vh - 180px);
 }
 
 .no-data-placeholder {
@@ -263,6 +264,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  max-height: calc(100vh - 200px);
 }
 
 .chart-container {
@@ -279,7 +281,7 @@
   overflow: auto;
   border: 1px solid #dee2e6;
   border-radius: 0.375rem;
-  max-height: none;
+  max-height: calc(100vh - 400px);
   min-height: 200px;
   scrollbar-width: thin;
   scrollbar-color: #c1c1c1 #f1f1f1;
@@ -315,10 +317,21 @@
   max-width: none;
   word-break: keep-all;
   overflow-wrap: normal;
+  vertical-align: top;
 }
 
 .table td:hover {
   background-color: #f8f9fa;
+}
+
+/* Table body scrollable area */
+.table tbody {
+  display: table-row-group;
+}
+
+.table thead {
+  display: table-header-group;
+  position: relative;
 }
 
 /* Table wrapper with better scroll handling */
@@ -349,6 +362,25 @@
 }
 
 .table-responsive:hover::after {
+  opacity: 1;
+}
+
+/* Vertical scroll indicator */
+.table-responsive::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background: linear-gradient(to top, rgba(255,255,255,0.9) 0%, transparent 100%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  z-index: 5;
+}
+
+.table-responsive:hover::before {
   opacity: 1;
 }
 
@@ -1242,6 +1274,16 @@
   
   .visualization-content {
     padding: 0.5rem;
+    max-height: calc(100vh - 450px);
+  }
+  
+  .visualization-container {
+    max-height: calc(100vh - 470px);
+  }
+  
+  .table-responsive {
+    max-height: calc(100vh - 500px);
+    min-height: 150px;
   }
   
   .input-area {
@@ -1334,6 +1376,19 @@
   .table td {
     min-width: 80px;
     font-size: 0.75rem;
+  }
+  
+  .visualization-content {
+    max-height: calc(100vh - 350px);
+  }
+  
+  .visualization-container {
+    max-height: calc(100vh - 370px);
+  }
+  
+  .table-responsive {
+    max-height: calc(100vh - 400px);
+    min-height: 120px;
   }
   
   .input-group {
@@ -1508,6 +1563,21 @@
 /* Better horizontal scrollbar for table */
 .table-responsive::-webkit-scrollbar-corner {
   background: #f1f1f1;
+}
+
+/* Enhanced table scrolling */
+.table-responsive {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Scroll shadows for better UX */
+.table-responsive.has-vertical-scroll::before {
+  opacity: 1;
+}
+
+.table-responsive.has-horizontal-scroll::after {
+  opacity: 1;
 }
 
 /* Additional styles for minimized sidebar */
